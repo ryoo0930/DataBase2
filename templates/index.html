@@ -1,0 +1,128 @@
+{% extends 'layout.html' %}
+{% block content %}
+  <!-- 타이틀 -->
+  <section class="hero">
+    <h1 id="mainTitle">
+      {% if search_query %}
+        {{ search_query }} : 검색 결과
+      {% else %}
+        CVE-INSIGHT
+      {% endif %}
+    </h1>
+  </section>
+
+  <!-- 검색창 -->
+  <section class="search-bar">
+    <form method="get" action="/">
+      <input
+        name="search"
+        type="text"
+        placeholder="Vendor 또는 Product 검색..."
+        value="{{ search_query }}"
+      />
+      <!-- 현재 필터 유지, 페이지는 검색마다 1로 리셋 -->
+      <input type="hidden" name="filter" value="{{ selected }}" />
+      <input type="hidden" name="page"   value="1" />
+      <button type="submit">검색</button>
+    </form>
+  </section>
+
+  <!-- 이전 / 필터 / 다음 -->
+  <section class="controls">
+    <button onclick="navigatePage({{ page-1 }})" {% if not has_prev %}disabled{% endif %}>
+      ◀ 이전
+    </button>
+
+    <div class="filters">
+      <button onclick="navigateFilter('ALL',1)"
+              class="btn-all {% if selected=='ALL' %}active{% endif %}">
+        모든 CVE 보기 <span class="badge">{{ total_count }}</span>
+      </button>
+      <button onclick="navigateFilter('CRITICAL',1)"
+              class="btn-critical {% if selected=='CRITICAL' %}active{% endif %}">
+        CRITICAL <span class="badge">{{ counts['CRITICAL'] }}</span>
+      </button>
+      <button onclick="navigateFilter('HIGH',1)"
+              class="btn-high {% if selected=='HIGH' %}active{% endif %}">
+        HIGH <span class="badge">{{ counts['HIGH'] }}</span>
+      </button>
+      <button onclick="navigateFilter('MEDIUM',1)"
+              class="btn-medium {% if selected=='MEDIUM' %}active{% endif %}">
+        MEDIUM <span class="badge">{{ counts['MEDIUM'] }}</span>
+      </button>
+      <button onclick="navigateFilter('LOW',1)"
+              class="btn-low {% if selected=='LOW' %}active{% endif %}">
+        LOW <span class="badge">{{ counts['LOW'] }}</span>
+      </button>
+      <button onclick="navigateFilter('UNKNOWN',1)"
+              class="btn-unknown {% if selected=='UNKNOWN' %}active{% endif %}">
+        UNKNOWN <span class="badge">{{ counts['UNKNOWN'] }}</span>
+      </button>
+    </div>
+
+    <button onclick="navigatePage({{ page+1 }})" {% if not has_next %}disabled{% endif %}>
+      다음 ▶
+    </button>
+  </section>
+
+  <!-- CVE 리스트 -->
+  <section class="table-container">
+    <table id="cveTable">
+      <colgroup>
+        <col class="col-id"/>
+        <col class="col-desc"/>
+        <col class="col-vendor"/>
+        <col class="col-product"/>
+        <col class="col-cwe"/>
+        <col class="col-pub"/>
+      </colgroup>
+      <thead>
+        <tr>
+          <th>CVE-ID</th>
+          <th>Description</th>
+          <th>Vendor</th>
+          <th>Product</th>
+          <th>CWE-ID</th>
+          <th>Published</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cves %}
+        <tr class="sev-{{ c.severity|lower }}">
+          <td>
+            <a href="https://nvd.nist.gov/vuln/detail/{{ c.cve_id }}" target="_blank">
+              {{ c.cve_id }}
+            </a>
+          </td>
+          <td>{{ c.description }}</td>
+          <td>{{ c.vendor_name or 'Unknown' }}</td>
+          <td>{{ c.product_name or 'Unknown' }}</td>
+          <td>{{ c.cwe_id }}</td>
+          <td class="{% if c.is_recent %}recent-date{% endif %}">
+            {{ c.published_date }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <script>
+    const currentSearch = "{{ search_query|e }}";
+
+    function navigateFilter(filter, page) {
+      let url = `/?filter=${filter}&page=${page}`;
+      if (currentSearch) {
+        url += `&search=${encodeURIComponent(currentSearch)}`;
+      }
+      window.location.href = url + '#cveTable';
+    }
+
+    function navigatePage(page) {
+      const params = new URLSearchParams(window.location.search);
+      params.set('page', page);
+      let url = `${location.pathname}?${params.toString()}`;
+      window.location.href = url + '#cveTable';
+    }
+  </script>
+{% endblock %}

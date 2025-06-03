@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CVE-INSIGHT</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    // 모든 리소스가 로드된 후(이미지·폰트 등) 실행
+    window.onload = () => {
+      // 해시가 #cveTable 이면 해당 위치로 스크롤
+      if (location.hash === '#cveTable') {
+        const tbl = document.getElementById('cveTable');
+        if (tbl) tbl.scrollIntoView();
+      }
+      // 페이지 보이기
+      setTimeout(() => {
+        document.documentElement.style.visibility = 'visible';
+      }, 400);
+    };
+  </script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container">
+      <a href="{{ url_for('index') }}" class="brand">DATABASE 8조</a>
+      <!--
+      <ul class="menu">
+        <li><a href="#">HOME</a></li>
+        <li><a href="#">JBNUPC</a></li>
+        <li><a href="#">STUDY</a></li>
+        <li><a href="#">ACTIVITY</a></li>
+        <li><a href="#">RECRUIT</a></li>
+        <li><a href="#">CONTACT</a></li>
+        <li><a href="#"><i class="icon-search"></i></a></li>
+      </ul>
+      -->
+    </div>
+  </nav>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
