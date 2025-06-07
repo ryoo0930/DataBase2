@@ -30,11 +30,9 @@ def api_stats():
     stats = {}
     product_name = request.args.get('product')
 
-    # product 파라미터가 있을 때만 동작하는 기본 로직은 유지
     if product_name:
         params = {'product': product_name}
         with conn.cursor() as cur:
-            # 1. 심각도별 분포 (기존과 동일하나, product 파라미터 바인딩 방식만 정리)
             severity_sql = """
                 SELECT UPPER(c.severity) AS severity, COUNT(*) AS count
                 FROM cve AS c
@@ -46,25 +44,18 @@ def api_stats():
             cur.execute(severity_sql, params)
             stats['severity_distribution'] = cur.fetchall()
 
-            # ==================== 수정된 부분 시작 ====================
-            # 2. CVE 등록 추이 (12개월, 0으로 채우기 기능 적용)
             chart_title = "최근 1년 등록 추이"
             
-            # MySQL 8.0 이상에서 지원하는 RECURSIVE CTE를 사용하여 12개월 목록 생성
             trend_sql = """
                 WITH RECURSIVE month_series (month_start) AS (
-                    -- 11개월 전 첫날부터 시작
                     SELECT DATE_SUB(LAST_DAY(CURDATE()), INTERVAL 12 MONTH) + INTERVAL 1 DAY
                     UNION ALL
-                    -- 다음 달을 계속 추가
                     SELECT month_start + INTERVAL 1 MONTH
                     FROM month_series
                     WHERE month_start + INTERVAL 1 MONTH <= CURDATE()
                 )
                 SELECT
-                    -- YYYY-MM 형식으로 월 표시
                     DATE_FORMAT(m.month_start, '%%Y-%%m') AS `date`,
-                    -- 해당 월의 CVE 개수를 세고, 없으면 0으로 표시
                     COALESCE(COUNT(c.cve_id), 0) AS `count`
                 FROM
                     month_series m
@@ -82,7 +73,6 @@ def api_stats():
             cur.execute(trend_sql, params)
             stats['daily_trend'] = cur.fetchall()
             stats['trend_chart_title'] = chart_title
-            # ==================== 수정된 부분 끝 ====================
 
     conn.close()
     return jsonify(stats)
@@ -108,22 +98,31 @@ def index():
             page = 1
         offset = (page - 1) * PER_PAGE
 
-        base_sql = """
+        # 1. 카운트 계산을 위한 SQL 생성 (검색어만 반영)
+        count_base_sql = """
             FROM cve AS c
             LEFT JOIN cve_product AS cp ON c.cve_id = cp.cve_id
             LEFT JOIN product      AS p  ON cp.product_id = p.product_id
             LEFT JOIN vendor       AS v  ON p.vendor_id = v.vendor_id
             WHERE 1=1
         """
-        params = {}
-
-        if selected != 'ALL':
-            base_sql += " AND UPPER(c.severity) = %(sev)s"
-            params['sev'] = selected
-
+        count_params = {}
         if search_q:
-            base_sql += " AND (LOWER(v.vendor_name) LIKE %(pat)s OR LOWER(p.product_name) LIKE %(pat)s)"
-            params['pat'] = f"%{search_q.lower()}%"
+            count_base_sql += " AND (LOWER(v.vendor_name) LIKE %(pat)s OR LOWER(p.product_name) LIKE %(pat)s)"
+            count_params['pat'] = f"%{search_q.lower()}%"
+        
+        count_sql = (
+            "SELECT UPPER(c.severity) AS sev, COUNT(*) AS cnt "
+            + count_base_sql + " AND c.published_date >= DATE_SUB(CURDATE(), INTERVAL 3 DAY) "
+            " GROUP BY UPPER(c.severity)"
+        )
+
+        # 2. 테이블 목록을 위한 SQL 생성 (검색어 + 심각도 필터 모두 반영)
+        list_base_sql = count_base_sql
+        list_params = count_params.copy()
+        if selected != 'ALL':
+            list_base_sql += " AND UPPER(c.severity) = %(sev)s"
+            list_params['sev'] = selected
 
         order_by_clause = f"ORDER BY {VALID_SORT_COLUMNS[sort_by]} {sort_order}"
         list_sql = (
@@ -133,24 +132,20 @@ def index():
             " c.published_date AS pub_date,"
             " DATE_FORMAT(c.published_date,'%%Y-%%m-%%d') AS published_date,"
             " v.vendor_name, p.product_name "
-            + base_sql + f" {order_by_clause} LIMIT {PER_PAGE+1} OFFSET {offset}"
-        )
-
-        count_sql = (
-            "SELECT UPPER(c.severity) AS sev, COUNT(*) AS cnt "
-            + base_sql + " AND c.published_date >= DATE_SUB(CURDATE(), INTERVAL 3 DAY) "
-            " GROUP BY UPPER(c.severity)"
+            + list_base_sql + f" {order_by_clause} LIMIT {PER_PAGE+1} OFFSET {offset}"
         )
 
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute(list_sql, params)
+            # 목록은 list_sql과 list_params 사용
+            cur.execute(list_sql, list_params)
             rows = cur.fetchall()
             cves = rows[:PER_PAGE]
             has_next = len(rows) > PER_PAGE
             has_prev = page > 1
 
-            cur.execute(count_sql, params)
+            # 카운트는 count_sql과 count_params 사용
+            cur.execute(count_sql, count_params)
             raw_counts = {r['sev']: r['cnt'] for r in cur.fetchall()}
 
         conn.close()
