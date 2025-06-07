@@ -6,7 +6,8 @@
 
 ## 📚 프로젝트 소개
 
-본 프로젝트는 **Flask**와 **MySQL**을 사용하여 CVE(Common Vulnerabilities and Exposures) 정보를 조회하고 필터링하는 웹 애플리케이션입니다. 사용자들은 이 애플리케이션을 통해 특정 조건에 맞는 CVE 정보를 쉽게 찾아볼 수 있습니다.
+본 프로젝트는 **Flask**와 **MySQL**을 사용하여 CVE(Common Vulnerabilities and Exposures) 정보를 조회하고 필터링하는 웹 애플리케이션입니다.
+사용자들은 이 애플리케이션을 통해 특정 조건에 맞는 CVE 정보를 쉽게 찾아볼 수 있습니다.
 
 ---
 
