@@ -1,0 +1,29 @@
+{% for c in cves %}
+<tr class="sev-{{ c.severity|lower }} {% if c.is_recent %}recent-row{% endif %}" style="opacity: 0; animation: slideUp 0.4s ease-out {{ 0.05 * loop.index }}s forwards;">
+  <td class="cell-new">
+    {% if c.is_recent %}
+      <span class="new-badge">NEW</span>
+    {% endif %}
+  </td>
+  <td>
+    <a href="https://nvd.nist.gov/vuln/detail/{{ c.cve_id }}" target="_blank">
+      {{ c.cve_id }}
+    </a>
+  </td>
+  <td>{{ c.description }}</td>
+  <td>{{ c.vendor_name or 'Unknown' }}</td>
+  <td>
+    {% if c.product_name and c.product_name != 'Unknown' %}
+      <a class="product-link" onclick="showProductDashboard('{{ c.product_name|e }}')" title="{{ c.product_name|e }}">
+        {{ c.product_name }}
+      </a>
+    {% else %}
+      {{ 'Unknown' }}
+    {% endif %}
+  </td>
+  <td>{{ c.cwe_id }}</td>
+  <td class="{% if c.is_recent %}recent-date{% endif %}">
+    {{ c.published_date }}
+  </td>
+</tr>
+{% endfor %}

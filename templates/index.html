@@ -1,74 +1,70 @@
 {% extends 'layout.html' %}
 {% block content %}
-  <!-- 타이틀 -->
   <section class="hero">
-    <h1 id="mainTitle">
-      {% if search_query %}
-        {{ search_query }} : 검색 결과
-      {% else %}
-        CVE-INSIGHT
-      {% endif %}
-    </h1>
+    <h1 id="mainTitle">CVE-INSIGHT</h1>
   </section>
 
-  <!-- 검색창 -->
+  <section class="dashboard" id="dashboard-section" style="display: none;">
+    <div class="chart-container">
+      <h3 id="dashboard-title">Dashboard</h3>
+      <div class="chart-wrapper">
+        <canvas id="severityChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-container">
+      <h3 id="trend-chart-title">최근 30일 등록 추이</h3>
+      <div class="chart-wrapper">
+        <canvas id="dailyTrendChart"></canvas>
+      </div>
+    </div>
+  </section>
+
   <section class="search-bar">
-    <form method="get" action="/">
+    <form id="search-form" method="get" action="/">
       <input
+        id="search-input"
         name="search"
         type="text"
         placeholder="Vendor 또는 Product 검색..."
         value="{{ search_query }}"
       />
-      <!-- 현재 필터 유지, 페이지는 검색마다 1로 리셋 -->
-      <input type="hidden" name="filter" value="{{ selected }}" />
-      <input type="hidden" name="page"   value="1" />
       <button type="submit">검색</button>
     </form>
   </section>
 
-  <!-- 이전 / 필터 / 다음 -->
   <section class="controls">
-    <button onclick="navigatePage({{ page-1 }})" {% if not has_prev %}disabled{% endif %}>
+    <button id="prev-page-btn" onclick="navigatePage(currentPage - 1)" {% if not has_prev %}disabled{% endif %}>
       ◀ 이전
     </button>
-
     <div class="filters">
-      <button onclick="navigateFilter('ALL',1)"
-              class="btn-all {% if selected=='ALL' %}active{% endif %}">
-        모든 CVE 보기 <span class="badge">{{ total_count }}</span>
+      <button onclick="navigateFilter('ALL')" class="btn-all {% if selected=='ALL' %}active{% endif %}">
+        모든 CVE 보기 <span id="badge-ALL" class="badge">{{ total_count }}</span>
       </button>
-      <button onclick="navigateFilter('CRITICAL',1)"
-              class="btn-critical {% if selected=='CRITICAL' %}active{% endif %}">
-        CRITICAL <span class="badge">{{ counts['CRITICAL'] }}</span>
+      <button onclick="navigateFilter('CRITICAL')" class="btn-critical {% if selected=='CRITICAL' %}active{% endif %}">
+        CRITICAL <span id="badge-CRITICAL" class="badge">{{ counts['CRITICAL'] }}</span>
       </button>
-      <button onclick="navigateFilter('HIGH',1)"
-              class="btn-high {% if selected=='HIGH' %}active{% endif %}">
-        HIGH <span class="badge">{{ counts['HIGH'] }}</span>
+      <button onclick="navigateFilter('HIGH')" class="btn-high {% if selected=='HIGH' %}active{% endif %}">
+        HIGH <span id="badge-HIGH" class="badge">{{ counts['HIGH'] }}</span>
       </button>
-      <button onclick="navigateFilter('MEDIUM',1)"
-              class="btn-medium {% if selected=='MEDIUM' %}active{% endif %}">
-        MEDIUM <span class="badge">{{ counts['MEDIUM'] }}</span>
+      <button onclick="navigateFilter('MEDIUM')" class="btn-medium {% if selected=='MEDIUM' %}active{% endif %}">
+        MEDIUM <span id="badge-MEDIUM" class="badge">{{ counts['MEDIUM'] }}</span>
       </button>
-      <button onclick="navigateFilter('LOW',1)"
-              class="btn-low {% if selected=='LOW' %}active{% endif %}">
-        LOW <span class="badge">{{ counts['LOW'] }}</span>
+      <button onclick="navigateFilter('LOW')" class="btn-low {% if selected=='LOW' %}active{% endif %}">
+        LOW <span id="badge-LOW" class="badge">{{ counts['LOW'] }}</span>
       </button>
-      <button onclick="navigateFilter('UNKNOWN',1)"
-              class="btn-unknown {% if selected=='UNKNOWN' %}active{% endif %}">
-        UNKNOWN <span class="badge">{{ counts['UNKNOWN'] }}</span>
+      <button onclick="navigateFilter('UNKNOWN')" class="btn-unknown {% if selected=='UNKNOWN' %}active{% endif %}">
+        UNKNOWN <span id="badge-UNKNOWN" class="badge">{{ counts['UNKNOWN'] }}</span>
       </button>
     </div>
-
-    <button onclick="navigatePage({{ page+1 }})" {% if not has_next %}disabled{% endif %}>
+    <button id="next-page-btn" onclick="navigatePage(currentPage + 1)" {% if not has_next %}disabled{% endif %}>
       다음 ▶
     </button>
   </section>
 
-  <!-- CVE 리스트 -->
   <section class="table-container">
     <table id="cveTable">
       <colgroup>
+        <col class="col-new"/>
         <col class="col-id"/>
         <col class="col-desc"/>
         <col class="col-vendor"/>
@@ -78,29 +74,35 @@
       </colgroup>
       <thead>
         <tr>
-          <th>CVE-ID</th>
+          <th></th>
+          <th><a href="#" onclick="navigateSort('id'); return false;">CVE-ID {% if sort_by == 'id' %}<span class="sort-indicator">{{ '▲' if sort_order == 'asc' else '▼' }}</span>{% endif %}</a></th>
           <th>Description</th>
           <th>Vendor</th>
           <th>Product</th>
           <th>CWE-ID</th>
-          <th>Published</th>
+          <th>Published {% if sort_by == 'date' %}<span class="sort-indicator"></span>{% endif %}</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="cve-tbody">
         {% for c in cves %}
-        <tr class="sev-{{ c.severity|lower }}">
-          <td>
-            <a href="https://nvd.nist.gov/vuln/detail/{{ c.cve_id }}" target="_blank">
-              {{ c.cve_id }}
-            </a>
+        <tr class="sev-{{ c.severity|lower }} {% if c.is_recent %}recent-row{% endif %}">
+          <td class="cell-new">
+            {% if c.is_recent %}<span class="new-badge">NEW</span>{% endif %}
           </td>
+          <td><a href="https://nvd.nist.gov/vuln/detail/{{ c.cve_id }}" target="_blank">{{ c.cve_id }}</a></td>
           <td>{{ c.description }}</td>
           <td>{{ c.vendor_name or 'Unknown' }}</td>
-          <td>{{ c.product_name or 'Unknown' }}</td>
-          <td>{{ c.cwe_id }}</td>
-          <td class="{% if c.is_recent %}recent-date{% endif %}">
-            {{ c.published_date }}
+          <td>
+            {% if c.product_name and c.product_name != 'Unknown' %}
+              <a class="product-link" onclick="showProductDashboard('{{ c.product_name|e }}')" title="{{ c.product_name|e }}">
+                {{ c.product_name }}
+              </a>
+            {% else %}
+              {{ 'Unknown' }}
+            {% endif %}
           </td>
+          <td>{{ c.cwe_id }}</td>
+          <td class="{% if c.is_recent %}recent-date{% endif %}">{{ c.published_date }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -108,21 +110,177 @@
   </section>
 
   <script>
-    const currentSearch = "{{ search_query|e }}";
+    // 페이지의 현재 상태를 관리하는 전역 변수
+    let currentPage = {{ page }};
+    let currentFilter = "{{ selected }}";
+    let currentSearch = "{{ search_query|e }}";
+    let currentSortBy = "{{ sort_by }}";
+    let currentSortOrder = "{{ sort_order }}";
 
-    function navigateFilter(filter, page) {
-      let url = `/?filter=${filter}&page=${page}`;
-      if (currentSearch) {
-        url += `&search=${encodeURIComponent(currentSearch)}`;
-      }
-      window.location.href = url + '#cveTable';
+    // --- 이벤트 리스너 ---
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('search-form').addEventListener('submit', handleSearch);
+    });
+
+    window.onpopstate = function(event) {
+        const params = new URLSearchParams(window.location.search);
+        const stateToLoad = {
+            page: event.state?.page || parseInt(params.get('page')) || 1,
+            filter: event.state?.filter || params.get('filter') || 'ALL',
+            search: event.state?.search || params.get('search') || '',
+            sort_by: event.state?.sort_by || params.get('sort_by') || 'date',
+            sort_order: event.state?.sort_order || params.get('sort_order') || 'desc',
+        };
+        updateTableContent(stateToLoad, false);
+    };
+
+    // --- 네비게이션 함수 ---
+    function navigatePage(page) {
+        if (page < 1) return;
+        updateTableContent({ page: page });
     }
 
-    function navigatePage(page) {
-      const params = new URLSearchParams(window.location.search);
-      params.set('page', page);
-      let url = `${location.pathname}?${params.toString()}`;
-      window.location.href = url + '#cveTable';
+    function navigateFilter(filter) {
+        updateTableContent({ filter: filter, page: 1 });
+    }
+
+    function navigateSort(newSortBy) {
+        const newSortOrder = (newSortBy === currentSortBy && currentSortOrder === 'desc') ? 'asc' : 'desc';
+        const params = new URLSearchParams({
+            filter: currentFilter,
+            page: 1,
+            search: currentSearch,
+            sort_by: newSortBy,
+            sort_order: newSortOrder
+        });
+        window.location.href = `/?${params.toString()}`;
+    }
+    
+    function handleSearch(event) {
+        event.preventDefault();
+        const searchInput = document.getElementById('search-input');
+        updateTableContent({ search: searchInput.value, page: 1 });
+    }
+
+    // --- 핵심 로직: 콘텐츠를 비동기적으로 업데이트하는 범용 함수 ---
+    async function updateTableContent(newParams = {}, updateHistory = true) {
+        const tbody = document.getElementById('cve-tbody');
+        const prevBtn = document.getElementById('prev-page-btn');
+        const nextBtn = document.getElementById('next-page-btn');
+
+        tbody.style.opacity = 0.5;
+
+        const state = {
+            page: newParams.page ?? currentPage,
+            filter: newParams.filter ?? currentFilter,
+            search: newParams.search ?? currentSearch,
+            sort_by: newParams.sort_by ?? currentSortBy,
+            sort_order: newParams.sort_order ?? currentSortOrder,
+        };
+
+        const urlParams = new URLSearchParams(state);
+
+        try {
+            const response = await fetch(`/?${urlParams.toString()}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const message = errorData.error || '알 수 없는 오류가 발생했습니다.';
+                throw new Error(message);
+            }
+            
+            const data = await response.json();
+
+            tbody.innerHTML = data.html;
+            tbody.style.opacity = 1;
+
+            currentPage = state.page;
+            currentFilter = state.filter;
+            currentSearch = state.search;
+            currentSortBy = state.sort_by;
+            currentSortOrder = state.sort_order;
+            
+            document.querySelectorAll('.filters button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.filters .btn-${currentFilter.toLowerCase()}`).classList.add('active');
+
+            prevBtn.disabled = !data.has_prev;
+            nextBtn.disabled = !data.has_next;
+
+            document.getElementById('badge-ALL').textContent = data.total_count;
+            document.getElementById('badge-CRITICAL').textContent = data.counts.CRITICAL;
+            document.getElementById('badge-HIGH').textContent = data.counts.HIGH;
+            document.getElementById('badge-MEDIUM').textContent = data.counts.MEDIUM;
+            document.getElementById('badge-LOW').textContent = data.counts.LOW;
+            document.getElementById('badge-UNKNOWN').textContent = data.counts.UNKNOWN;
+
+            if (updateHistory) {
+                history.pushState(state, '', `/?${urlParams.toString()}`);
+            }
+        } catch (error) {
+            console.error('Failed to update content:', error);
+            tbody.style.opacity = 1;
+            alert(error.message || '콘텐츠를 불러오는 데 실패했습니다.');
+        }
+    }
+    
+    // --- 차트 관련 함수 ---
+    let severityChartInstance;
+    let dailyTrendChartInstance;
+    async function fetchAndRenderCharts(productName = null) {
+        try {
+            let apiUrl = '/api/stats';
+            if (productName) {
+                apiUrl += `?product=${encodeURIComponent(productName)}`;
+            }
+            const response = await fetch(apiUrl);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const stats = await response.json();
+
+            if (severityChartInstance) severityChartInstance.destroy();
+            if (dailyTrendChartInstance) dailyTrendChartInstance.destroy();
+
+            const severityCtx = document.getElementById('severityChart').getContext('2d');
+            const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+            const severityData = { labels: [], counts: [], colors: [] };
+            const colorMap = { 'CRITICAL': '#600', 'HIGH': '#a60', 'MEDIUM': '#aa0', 'LOW': '#0a0', 'UNKNOWN': '#555' };
+            severityOrder.forEach(sev => {
+                const dataPoint = stats.severity_distribution.find(d => d.severity === sev);
+                if (dataPoint) {
+                    severityData.labels.push(sev);
+                    severityData.counts.push(dataPoint.count);
+                    severityData.colors.push(colorMap[sev]);
+                }
+            });
+
+            severityChartInstance = new Chart(severityCtx, {
+              type: 'doughnut', data: { labels: severityData.labels, datasets: [{ data: severityData.counts, backgroundColor: severityData.colors, borderColor: '#111', borderWidth: 2 }] },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#fff' } } } }
+            });
+
+            // 차트 제목 업데이트
+            document.getElementById('trend-chart-title').textContent = stats.trend_chart_title;
+
+            const dailyTrendCtx = document.getElementById('dailyTrendChart').getContext('2d');
+            const trendLabels = stats.daily_trend.map(d => d.date);
+            const trendData = stats.daily_trend.map(d => d.count);
+            dailyTrendChartInstance = new Chart(dailyTrendCtx, {
+                type: 'line', data: { labels: trendLabels, datasets: [{ label: 'Daily CVE Count', data: trendData, fill: true, backgroundColor: 'rgba(78, 156, 255, 0.2)', borderColor: 'rgba(78, 156, 255, 1)', tension: 0.1 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } }, x: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } } }, plugins: { legend: { display: false } } }
+            });
+        } catch (error) { console.error('Failed to fetch stats for charts:', error); }
+    }
+
+    function showProductDashboard(productName) {
+        const dashboard = document.getElementById('dashboard-section');
+        const title = document.getElementById('dashboard-title');
+        title.textContent = `'${productName}' 관련 통계`;
+        dashboard.style.display = 'grid';
+        fetchAndRenderCharts(productName);
+        dashboard.scrollIntoView({ behavior: 'smooth' });
     }
   </script>
 {% endblock %}

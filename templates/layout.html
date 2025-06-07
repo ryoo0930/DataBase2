@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <title>CVE-INSIGHT</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     // 모든 리소스가 로드된 후(이미지·폰트 등) 실행
     window.onload = () => {
@@ -23,18 +24,7 @@
   <nav class="navbar">
     <div class="container">
       <a href="{{ url_for('index') }}" class="brand">DATABASE 8조</a>
-      <!--
-      <ul class="menu">
-        <li><a href="#">HOME</a></li>
-        <li><a href="#">JBNUPC</a></li>
-        <li><a href="#">STUDY</a></li>
-        <li><a href="#">ACTIVITY</a></li>
-        <li><a href="#">RECRUIT</a></li>
-        <li><a href="#">CONTACT</a></li>
-        <li><a href="#"><i class="icon-search"></i></a></li>
-      </ul>
-      -->
-    </div>
+      </div>
   </nav>
 
   <main>

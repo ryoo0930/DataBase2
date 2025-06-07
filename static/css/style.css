@@ -1,4 +1,3 @@
-
 html.preload, body.preload {
   visibility: hidden;
 }
@@ -45,26 +44,54 @@ body {
   margin: 0;
 }
 
+/* 대시보드 스타일 */
+.dashboard {
+  max-width: 1400px;
+  margin: 0 auto 3rem;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 2rem;
+  align-items: stretch;
+}
+
+.chart-container {
+  background: #111;
+  padding: 1.5rem;
+  border-radius: 8px;
+}
+
+.chart-container h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  text-align: center;
+  color: #eee;
+}
+
+.chart-wrapper {
+  position: relative;
+  height: 300px;
+}
+
 /* 검색창 */
 
 .search-bar form {
   display: flex;
   width: 100%;
-  max-width: 800px; /* 원하는 최대 폭 */
+  max-width: 800px;
 }
 
 .search-bar {
-  max-width: 1400px;        /* 컨테이너 최대 폭 */
-  margin: 0 auto 10rem;     /* 아래쪽 여백 10rem */
+  max-width: 1400px;
+  margin: 4rem auto 2rem;
   display: flex;
   justify-content: center;
 }
 
 .search-bar input {
   flex: 1;
-  max-width: 1200px;        /* 원래 넉넉했던 크기로 */
-  height: 6rem;
-  line-height: 6rem;
+  max-width: 1200px;
+  height: 4rem;
+  line-height: 4rem;
   padding: 0 1rem;
   background-color: #444;
   color: #fff;
@@ -79,8 +106,8 @@ body {
 }
 
 .search-bar button {
-  height: 6rem;
-  line-height: 6rem;
+  height: 4rem;
+  line-height: 4rem;
   padding: 0 1.5rem;
   background-color: #444;
   color: #fff;
@@ -172,6 +199,7 @@ body {
   border-collapse: collapse;
   table-layout: fixed;
 }
+#cveTable col.col-new     { width: 60px;  }
 #cveTable col.col-id      { width: 160px; }
 #cveTable col.col-desc    { width: auto;  }
 #cveTable col.col-vendor  { width: 120px; }
@@ -193,9 +221,28 @@ body {
   color: #fff;
 }
 
-/* 최근 3일 Published 날짜 빨간색 */
-#cveTable td.recent-date {
-  color: #f33;
+/* 정렬 관련 스타일 */
+#cveTable th a {
+  color: #fff;
+  text-decoration: none;
+  display: block;
+  position: relative;
+}
+
+#cveTable th a:hover {
+  color: #aaa;
+}
+
+#cveTable th .sort-indicator {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+#cveTable td.cell-new {
+  text-align: center;
+  padding: 0;
 }
 
 /* 링크 스타일 */
@@ -216,18 +263,116 @@ body {
   text-decoration: none;
 }
 
-/* CVE-ID 링크 밑줄 제거 */
-#cveTable a,
-#cveTable a:link,
-#cveTable a:visited,
-#cveTable a:hover,
-#cveTable a:focus {
-  text-decoration: none;
+#cveTable .product-link {
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: #555;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+#cveTable .product-link:hover {
+  text-decoration-color: #fff;
+  color: #eee;
 }
 
 /* CVE-ID 링크 색상을 Severity 별로 다르게 */
-#cveTable tr.sev-critical   td a { color: #901f13; }  /* 빨강 */
-#cveTable tr.sev-high       td a { color: #d35400; }  /* 주황 */
-#cveTable tr.sev-medium     td a { color: #f1c40f; }  /* 노랑 */
-#cveTable tr.sev-low        td a { color: #27ae60; }  /* 초록 */
-#cveTable tr.sev-unknown    td a { color: #fff; }     /* 흰색 */
+#cveTable tr.sev-critical   td a { color: #901f13; }
+#cveTable tr.sev-high       td a { color: #d35400; }
+#cveTable tr.sev-medium     td a { color: #f1c40f; }
+#cveTable tr.sev-low        td a { color: #27ae60; }
+#cveTable tr.sev-unknown    td a { color: #fff; }
+
+/* 'NEW' 배지 스타일 */
+.new-badge {
+  display: inline-block;
+  padding: .1rem .4rem;
+  background-color: #f33;
+  color: #fff;
+  font-size: .7rem;
+  font-weight: bold;
+  border-radius: 8px;
+  vertical-align: middle;
+  animation: pulse 1.5s infinite;
+}
+
+/* 반짝이는 애니메이션 효과 */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 51, 51, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 51, 51, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 51, 51, 0);
+  }
+}
+
+/* 최근 CVE 행 전체 배경색 변경 */
+#cveTable tr.recent-row {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+
+/* ====================================================================== */
+/* ==================== 수정된 부분: 로딩 애니메이션 ==================== */
+/* ====================================================================== */
+
+/* 1. 애니메이션 효과 정의 */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 2. 주요 컴포넌트에 애니메이션 순차 적용 */
+/* 애니메이션이 시작되기 전에 잠시 투명하게 만듭니다. */
+.hero,
+.search-bar,
+.controls,
+.table-container,
+#cveTable tbody tr {
+  opacity: 0;
+}
+
+/* 애니메이션이 끝난 후 상태를 유지하도록 'forwards'를 추가합니다. */
+.hero {
+  animation: slideUp 0.5s ease-out 0.1s forwards;
+}
+
+.search-bar {
+  animation: slideUp 0.5s ease-out 0.2s forwards;
+}
+
+.controls {
+  animation: slideUp 0.5s ease-out 0.3s forwards;
+}
+
+.table-container {
+  animation: slideUp 0.5s ease-out 0.4s forwards;
+}
+
+
+/* 3. 테이블 행에 애니메이션 시차를 두고 적용 */
+#cveTable tbody tr {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+/* 각 행마다 미세한 시간차(delay)를 줍니다. */
+#cveTable tbody tr:nth-child(1) { animation-delay: 0.50s; }
+#cveTable tbody tr:nth-child(2) { animation-delay: 0.55s; }
+#cveTable tbody tr:nth-child(3) { animation-delay: 0.60s; }
+#cveTable tbody tr:nth-child(4) { animation-delay: 0.65s; }
+#cveTable tbody tr:nth-child(5) { animation-delay: 0.70s; }
+#cveTable tbody tr:nth-child(6) { animation-delay: 0.75s; }
+#cveTable tbody tr:nth-child(7) { animation-delay: 0.80s; }
+#cveTable tbody tr:nth-child(8) { animation-delay: 0.85s; }
+#cveTable tbody tr:nth-child(9) { animation-delay: 0.90s; }
+#cveTable tbody tr:nth-child(10) { animation-delay: 0.95s; }
+#cveTable tbody tr:nth-child(11) { animation-delay: 1.00s; }
+#cveTable tbody tr:nth-child(12) { animation-delay: 1.05s; }
