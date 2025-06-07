@@ -277,10 +277,12 @@
     function showProductDashboard(productName) {
         const dashboard = document.getElementById('dashboard-section');
         const title = document.getElementById('dashboard-title');
+
+        mainTitle.textContent = productName;
         title.textContent = `'${productName}' 관련 통계`;
         dashboard.style.display = 'grid';
         fetchAndRenderCharts(productName);
-        dashboard.scrollIntoView({ behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   </script>
 {% endblock %}
