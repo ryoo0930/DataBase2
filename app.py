@@ -29,24 +29,104 @@ def api_stats():
     conn = get_db_connection()
     stats = {}
     product_name = request.args.get('product')
-
+    vendor_name  = request.args.get('vendor')
+    
     if product_name:
         params = {'product': product_name}
+        try:
+            with conn.cursor() as cur:
+                # 1. 심각도 분포
+                try:
+                    cur.execute("""
+                        SELECT UPPER(c.severity) AS severity, COUNT(*) AS count
+                        FROM cve AS c
+                        JOIN cve_product AS cp ON c.cve_id = cp.cve_id
+                        JOIN product AS p ON cp.product_id = p.product_id
+                        WHERE p.product_name = %(product)s
+                        GROUP BY severity
+                    """, params)
+                    stats['severity_distribution'] = cur.fetchall()
+                except Exception as e:
+                    app.logger.error(f"Severity 쿼리 실패: {e}")
+                    stats['severity_distribution'] = []
+
+                # 2. 등록 추이
+                try:
+                    cur.execute("""
+                        WITH RECURSIVE month_series (month_start) AS (
+                            SELECT DATE_SUB(LAST_DAY(CURDATE()), INTERVAL 12 MONTH) + INTERVAL 1 DAY
+                            UNION ALL
+                            SELECT month_start + INTERVAL 1 MONTH
+                            FROM month_series
+                            WHERE month_start + INTERVAL 1 MONTH <= CURDATE()
+                        )
+                        SELECT DATE_FORMAT(m.month_start, '%%Y-%%m') AS `date`,
+                               COALESCE(COUNT(c.cve_id), 0) AS `count`
+                        FROM month_series m
+                        LEFT JOIN (
+                            cve c
+                            JOIN cve_product cp ON c.cve_id = cp.cve_id
+                            JOIN product p ON cp.product_id = p.product_id
+                        )
+                        ON p.product_name = %(product)s
+                        AND DATE_FORMAT(c.published_date, '%%Y-%%m') = DATE_FORMAT(m.month_start, '%%Y-%%m')
+                        GROUP BY `date`
+                        ORDER BY `date` DESC
+                    """, params)
+                    stats['daily_trend'] = cur.fetchall()
+                    stats['trend_chart_title'] = "최근 1년 등록 추이"
+                except Exception as e:
+                    app.logger.error(f"Trend 쿼리 실패: {e}")
+                    stats['daily_trend'] = []
+                    stats['trend_chart_title'] = "데이터 없음"
+
+                # 3. CWE TOP10
+                try:
+                    cur.execute("""
+                        SELECT
+                        c.cwe_id,
+                        COUNT(*) AS count
+                        FROM cve AS c
+                        JOIN cve_product AS cp
+                        ON c.cve_id = cp.cve_id
+                        JOIN product AS p
+                        ON cp.product_id = p.product_id
+                        WHERE p.product_name = %(product)s
+                        AND c.cwe_id IS NOT NULL
+                        AND c.cwe_id <> ''
+                        AND c.cwe_id <> 'UNKNOWN'
+                        GROUP BY c.cwe_id
+                        ORDER BY count DESC
+                        LIMIT 10;
+                    """, params)
+                    stats['cwe_top10'] = cur.fetchall()
+                except Exception as e:
+                    app.logger.error(f"CWE_TOP10 쿼리 실패: {e}")
+                    stats['CWE_TOP10'] = []
+                
+
+        finally:
+            conn.close()
+            
+    elif vendor_name:
+        params = {'vendor': vendor_name}
         with conn.cursor() as cur:
-            severity_sql = """
+            # 1) 심각도 분포 (vendor 필터)
+            cur.execute(
+                """
                 SELECT UPPER(c.severity) AS severity, COUNT(*) AS count
                 FROM cve AS c
                 JOIN cve_product AS cp ON c.cve_id = cp.cve_id
-                JOIN product AS p ON cp.product_id = p.product_id
-                WHERE p.product_name = %(product)s
+                JOIN product    AS p  ON cp.product_id = p.product_id
+                JOIN vendor     AS v  ON p.vendor_id = v.vendor_id
+                WHERE v.vendor_name = %(vendor)s
                 GROUP BY severity
-            """
-            cur.execute(severity_sql, params)
+                """, params)
             stats['severity_distribution'] = cur.fetchall()
 
-            chart_title = "최근 1년 등록 추이"
-            
-            trend_sql = """
+            # 2) 최근 1년 등록 추이
+            cur.execute(
+                """
                 WITH RECURSIVE month_series (month_start) AS (
                     SELECT DATE_SUB(LAST_DAY(CURDATE()), INTERVAL 12 MONTH) + INTERVAL 1 DAY
                     UNION ALL
@@ -56,25 +136,55 @@ def api_stats():
                 )
                 SELECT
                     DATE_FORMAT(m.month_start, '%%Y-%%m') AS `date`,
-                    COALESCE(COUNT(c.cve_id), 0) AS `count`
-                FROM
-                    month_series m
-                LEFT JOIN
-                    (cve c
-                    JOIN cve_product cp ON c.cve_id = cp.cve_id
-                    JOIN product p ON cp.product_id = p.product_id)
-                ON
-                    p.product_name = %(product)s AND DATE_FORMAT(c.published_date, '%%Y-%%m') = DATE_FORMAT(m.month_start, '%%Y-%%m')
-                GROUP BY
-                    `date`
-                ORDER BY
-                    `date` DESC;
-            """
-            cur.execute(trend_sql, params)
+                    COALESCE(COUNT(c.cve_id),0) AS `count`
+                FROM month_series m
+                LEFT JOIN (
+                    cve AS c
+                    JOIN cve_product AS cp ON c.cve_id = cp.cve_id
+                    JOIN product    AS p  ON cp.product_id = p.product_id
+                    JOIN vendor     AS v  ON p.vendor_id = v.vendor_id
+                ) ON v.vendor_name = %(vendor)s
+                   AND DATE_FORMAT(c.published_date,'%%Y-%%m') = DATE_FORMAT(m.month_start,'%%Y-%%m')
+                GROUP BY `date`
+                ORDER BY `date` DESC;
+                """, params)
             stats['daily_trend'] = cur.fetchall()
-            stats['trend_chart_title'] = chart_title
+            stats['trend_chart_title'] = "최근 1년 등록 추이"
 
-    conn.close()
+            # 3) CWE Top 10
+            cur.execute(
+                """
+                SELECT c.cwe_id, COUNT(*) AS count
+                FROM cve AS c
+                JOIN cve_product AS cp ON c.cve_id = cp.cve_id
+                JOIN product    AS p  ON cp.product_id = p.product_id
+                JOIN vendor     AS v  ON p.vendor_id = v.vendor_id
+                WHERE v.vendor_name = %(vendor)s
+                  AND c.cwe_id IS NOT NULL AND c.cwe_id <> '' AND c.cwe_id <> 'UNKNOWN'
+                GROUP BY c.cwe_id
+                ORDER BY count DESC
+                LIMIT 10;
+                """, params)
+            stats['cwe_top10'] = cur.fetchall()
+
+            # 4) Vendor의 product 리스트
+            cur.execute(
+                """
+                SELECT
+                    p.product_name,
+                    COUNT(*) AS count
+                FROM cve AS c
+                JOIN cve_product AS cp ON c.cve_id = cp.cve_id
+                JOIN product    AS p  ON cp.product_id = p.product_id
+                JOIN vendor     AS v  ON p.vendor_id = v.vendor_id
+                WHERE v.vendor_name = %(vendor)s
+                GROUP BY p.product_name
+                ORDER BY count DESC
+                LIMIT 10;
+            """, params)
+            stats['vendor_product_top10'] = cur.fetchall()
+        conn.close()
+
     return jsonify(stats)
 
 
@@ -97,32 +207,25 @@ def index():
         except ValueError:
             page = 1
         offset = (page - 1) * PER_PAGE
+        
+        
 
-        # 1. 카운트 계산을 위한 SQL 생성 (검색어만 반영)
-        count_base_sql = """
+        base_sql = """
             FROM cve AS c
             LEFT JOIN cve_product AS cp ON c.cve_id = cp.cve_id
             LEFT JOIN product      AS p  ON cp.product_id = p.product_id
             LEFT JOIN vendor       AS v  ON p.vendor_id = v.vendor_id
             WHERE 1=1
         """
-        count_params = {}
-        if search_q:
-            count_base_sql += " AND (LOWER(v.vendor_name) LIKE %(pat)s OR LOWER(p.product_name) LIKE %(pat)s)"
-            count_params['pat'] = f"%{search_q.lower()}%"
-        
-        count_sql = (
-            "SELECT UPPER(c.severity) AS sev, COUNT(*) AS cnt "
-            + count_base_sql + " AND c.published_date >= DATE_SUB(CURDATE(), INTERVAL 3 DAY) "
-            " GROUP BY UPPER(c.severity)"
-        )
+        params = {}
 
-        # 2. 테이블 목록을 위한 SQL 생성 (검색어 + 심각도 필터 모두 반영)
-        list_base_sql = count_base_sql
-        list_params = count_params.copy()
         if selected != 'ALL':
-            list_base_sql += " AND UPPER(c.severity) = %(sev)s"
-            list_params['sev'] = selected
+            base_sql += " AND UPPER(c.severity) = %(sev)s"
+            params['sev'] = selected
+
+        if search_q:
+            base_sql += " AND (LOWER(v.vendor_name) LIKE %(pat)s OR LOWER(p.product_name) LIKE %(pat)s)"
+            params['pat'] = f"%{search_q.lower()}%"
 
         order_by_clause = f"ORDER BY {VALID_SORT_COLUMNS[sort_by]} {sort_order}"
         list_sql = (
@@ -132,20 +235,24 @@ def index():
             " c.published_date AS pub_date,"
             " DATE_FORMAT(c.published_date,'%%Y-%%m-%%d') AS published_date,"
             " v.vendor_name, p.product_name "
-            + list_base_sql + f" {order_by_clause} LIMIT {PER_PAGE+1} OFFSET {offset}"
+            + base_sql + f" {order_by_clause} LIMIT {PER_PAGE+1} OFFSET {offset}"
+        )
+
+        count_sql = (
+            "SELECT UPPER(c.severity) AS sev, COUNT(*) AS cnt "
+            + base_sql + " AND c.published_date >= DATE_SUB(CURDATE(), INTERVAL 3 DAY) "
+            " GROUP BY UPPER(c.severity)"
         )
 
         conn = get_db_connection()
         with conn.cursor() as cur:
-            # 목록은 list_sql과 list_params 사용
-            cur.execute(list_sql, list_params)
+            cur.execute(list_sql, params)
             rows = cur.fetchall()
             cves = rows[:PER_PAGE]
             has_next = len(rows) > PER_PAGE
             has_prev = page > 1
 
-            # 카운트는 count_sql과 count_params 사용
-            cur.execute(count_sql, count_params)
+            cur.execute(count_sql, params)
             raw_counts = {r['sev']: r['cnt'] for r in cur.fetchall()}
 
         conn.close()

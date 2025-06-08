@@ -5,16 +5,35 @@
   </section>
 
   <section class="dashboard" id="dashboard-section" style="display: none;">
+    <!-- 1. 심각도 도넛 차트 -->
     <div class="chart-container">
       <h3 id="dashboard-title">Dashboard</h3>
       <div class="chart-wrapper">
         <canvas id="severityChart"></canvas>
       </div>
     </div>
+
+    <!-- 2. CWE Top 10 막대 차트 -->
     <div class="chart-container">
+      <h3>CWE 유형 TOP 10</h3>
+      <div class="chart-wrapper">
+        <canvas id="cweChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 3. 최근 등록 추이 선형 차트 (전체 열span) -->
+    <div class="chart-container trend-full">
       <h3 id="trend-chart-title">최근 30일 등록 추이</h3>
       <div class="chart-wrapper">
         <canvas id="dailyTrendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 4. VENDOR: CVE TOP10 Product 막대 그래프-->
+    <div id="vendorProductContainer" class="chart-container trend-full">
+      <h3>CVE 수가 많은 TOP 10 제품들</h3>
+      <div class="chart-wrapper">
+        <canvas id="vendorProductChart"></canvas>
       </div>
     </div>
   </section>
@@ -91,7 +110,15 @@
           </td>
           <td><a href="https://nvd.nist.gov/vuln/detail/{{ c.cve_id }}" target="_blank">{{ c.cve_id }}</a></td>
           <td>{{ c.description }}</td>
-          <td>{{ c.vendor_name or 'Unknown' }}</td>
+          <td>
+            {% if c.vendor_name and c.vendor_name != 'Unknown' %}
+              <a class="vendor-link" onclick="showVendorDashboard('{{ c.vendor_name|e }}')" title="{{ c.vendor_name|e }}">
+                {{ c.vendor_name }}
+              </a>
+            {% else %}
+              {{'Unknown'}}
+            {% endif %}
+          </td>
           <td>
             {% if c.product_name and c.product_name != 'Unknown' %}
               <a class="product-link" onclick="showProductDashboard('{{ c.product_name|e }}')" title="{{ c.product_name|e }}">
@@ -228,61 +255,227 @@
     }
     
     // --- 차트 관련 함수 ---
-    let severityChartInstance;
-    let dailyTrendChartInstance;
-    async function fetchAndRenderCharts(productName = null) {
-        try {
-            let apiUrl = '/api/stats';
-            if (productName) {
-                apiUrl += `?product=${encodeURIComponent(productName)}`;
+let severityChartInstance;
+let dailyTrendChartInstance;
+let cweChartInstance;
+let vendorProductChartInstance;
+
+async function fetchAndRenderCharts(productName = null) {
+    try {
+      const vpCont = document.getElementById('vendorProductContainer');
+      if (vpCont) vpCont.style.display = 'none';
+      if (vendorProductChartInstance) vendorProductChartInstance.destroy();
+
+
+
+        let apiUrl = '/api/stats';
+        if (productName) {
+            apiUrl += `?product=${encodeURIComponent(productName)}`;
+        }
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const stats = await response.json();
+
+        if (severityChartInstance) severityChartInstance.destroy();
+        if (dailyTrendChartInstance) dailyTrendChartInstance.destroy();
+        if (cweChartInstance) cweChartInstance.destroy();
+
+        // --- 심각도 도넛 차트 ---
+        const severityCtx = document.getElementById('severityChart').getContext('2d');
+        const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+        const severityData = { labels: [], counts: [], colors: [] };
+        const colorMap = { 'CRITICAL': '#600', 'HIGH': '#a60', 'MEDIUM': '#aa0', 'LOW': '#0a0', 'UNKNOWN': '#555' };
+        severityOrder.forEach(sev => {
+            const dataPoint = stats.severity_distribution.find(d => d.severity === sev);
+            if (dataPoint) {
+                severityData.labels.push(sev);
+                severityData.counts.push(dataPoint.count);
+                severityData.colors.push(colorMap[sev]);
             }
-            const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error('Network response was not ok');
-            const stats = await response.json();
+        });
 
-            if (severityChartInstance) severityChartInstance.destroy();
-            if (dailyTrendChartInstance) dailyTrendChartInstance.destroy();
-
-            const severityCtx = document.getElementById('severityChart').getContext('2d');
-            const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
-            const severityData = { labels: [], counts: [], colors: [] };
-            const colorMap = { 'CRITICAL': '#600', 'HIGH': '#a60', 'MEDIUM': '#aa0', 'LOW': '#0a0', 'UNKNOWN': '#555' };
-            severityOrder.forEach(sev => {
-                const dataPoint = stats.severity_distribution.find(d => d.severity === sev);
-                if (dataPoint) {
-                    severityData.labels.push(sev);
-                    severityData.counts.push(dataPoint.count);
-                    severityData.colors.push(colorMap[sev]);
+        severityChartInstance = new Chart(severityCtx, {
+            type: 'doughnut',
+            data: {
+                labels: severityData.labels,
+                datasets: [{
+                    data: severityData.counts,
+                    backgroundColor: severityData.colors,
+                    borderColor: '#111',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { color: '#fff' } }
                 }
-            });
+            }
+        });
 
-            severityChartInstance = new Chart(severityCtx, {
-              type: 'doughnut', data: { labels: severityData.labels, datasets: [{ data: severityData.counts, backgroundColor: severityData.colors, borderColor: '#111', borderWidth: 2 }] },
-              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#fff' } } } }
-            });
+        // --- 추이 선형 차트 ---
+        document.getElementById('trend-chart-title').textContent = stats.trend_chart_title;
+        const dailyTrendCtx = document.getElementById('dailyTrendChart').getContext('2d');
+        const trendLabels = stats.daily_trend.map(d => d.date);
+        const trendData = stats.daily_trend.map(d => d.count);
+        dailyTrendChartInstance = new Chart(dailyTrendCtx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [{
+                    label: 'Daily CVE Count',
+                    data: trendData,
+                    fill: true,
+                    backgroundColor: 'rgba(78, 156, 255, 0.2)',
+                    borderColor: 'rgba(78, 156, 255, 1)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        ticks: { color: '#ccc' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    },
+                    x: {
+                        ticks: { color: '#ccc' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
 
-            // 차트 제목 업데이트
-            document.getElementById('trend-chart-title').textContent = stats.trend_chart_title;
+        // --- CWE Top 10 막대 차트 ---
+        const cweCtx = document.getElementById('cweChart').getContext('2d');
+        const cweData = stats.cwe_top10 || [];
+        console.log('CWE 데이터:', stats.cwe_top10);
 
-            const dailyTrendCtx = document.getElementById('dailyTrendChart').getContext('2d');
-            const trendLabels = stats.daily_trend.map(d => d.date);
-            const trendData = stats.daily_trend.map(d => d.count);
-            dailyTrendChartInstance = new Chart(dailyTrendCtx, {
-                type: 'line', data: { labels: trendLabels, datasets: [{ label: 'Daily CVE Count', data: trendData, fill: true, backgroundColor: 'rgba(78, 156, 255, 0.2)', borderColor: 'rgba(78, 156, 255, 1)', tension: 0.1 }] },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } }, x: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } } }, plugins: { legend: { display: false } } }
-            });
-        } catch (error) { console.error('Failed to fetch stats for charts:', error); }
+        cweChartInstance = new Chart(cweCtx, {
+            type: 'bar',
+            data: {
+                labels: cweData.map(d => d.cwe_id),
+                datasets: [{
+                    label: 'CWE Count',
+                    data: cweData.map(d => d.count),
+                    backgroundColor: '#4e9cff',
+                    borderColor: '#111',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        ticks: { color: '#ccc' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    },
+                    x: {
+                        ticks: { color: '#ccc' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Failed to fetch stats for charts:', error);
     }
+  }
+  
+  // --- Vendor 전용 차트 렌더링 ---
+async function fetchAndRenderVendor(vendorName) {
+    try {
+        const vpCont = document.getElementById('vendorProductContainer');
+        if (vpCont) vpCont.style.display = 'block';
+        // 기존 인스턴스 파기
+        if (severityChartInstance)   severityChartInstance.destroy();
+        if (dailyTrendChartInstance) dailyTrendChartInstance.destroy();
+        if (cweChartInstance)        cweChartInstance.destroy();
+        if (vendorProductChartInstance) vendorProductChartInstance.destroy();
+
+        // API 호출 (vendor 파라미터 사용)
+        const res = await fetch(`/api/stats?vendor=${encodeURIComponent(vendorName)}`);
+        if (!res.ok) throw new Error('Network response was not ok');
+        const stats = await res.json();
+
+        console.log('vendor_product_top10:', stats.vendor_product_top10);
+
+        // 1) 심각도 도넛 차트
+        const severityCtx = document.getElementById('severityChart').getContext('2d');
+        const severityOrder = ['CRITICAL','HIGH','MEDIUM','LOW','UNKNOWN'];
+        const colorMap = { 'CRITICAL':'#600','HIGH':'#a60','MEDIUM':'#aa0','LOW':'#0a0','UNKNOWN':'#555' };
+        const sevLabels = [];
+        const sevData   = [];
+        const sevColors = [];
+        severityOrder.forEach(sev => {
+            const dp = stats.severity_distribution.find(d=>d.severity===sev);
+            if (dp) { sevLabels.push(sev); sevData.push(dp.count); sevColors.push(colorMap[sev]); }
+        });
+        severityChartInstance = new Chart(severityCtx, {
+            type: 'doughnut',
+            data: { labels:sevLabels, datasets:[{ data:sevData, backgroundColor:sevColors, borderColor:'#111', borderWidth:2 }] },
+            options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ color:'#fff' } } } }
+        });
+
+        // 2) 추이 선형 차트
+        document.getElementById('trend-chart-title').textContent = stats.trend_chart_title;
+        const trendCtx = document.getElementById('dailyTrendChart').getContext('2d');
+        const trendLabels = stats.daily_trend.map(d=>d.date);
+        const trendData   = stats.daily_trend.map(d=>d.count);
+        dailyTrendChartInstance = new Chart(trendCtx, {
+            type: 'line',
+            data:{ labels:trendLabels, datasets:[{ label:'Monthly CVE Count', data:trendData, fill:true, backgroundColor:'rgba(78,156,255,0.2)', borderColor:'rgba(78,156,255,1)', tension:0.1 }] },
+            options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ ticks:{color:'#ccc'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#ccc'}, grid:{color:'rgba(255,255,255,0.1)'} } }, plugins:{ legend:{ display:false } } }
+        });
+
+        // 3) CWE Top 10 막대 차트
+        const cweCtx = document.getElementById('cweChart').getContext('2d');
+        const cweLabels = (stats.cwe_top10||[]).map(d=>d.cwe_id);
+        const cweCounts = (stats.cwe_top10||[]).map(d=>d.count);
+        cweChartInstance = new Chart(cweCtx, {
+            type:'bar', data:{ labels:cweLabels, datasets:[{ label:'CWE Count', data:cweCounts, backgroundColor:'#4e9cff', borderColor:'#111', borderWidth:1 }] },
+            options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ ticks:{color:'#ccc'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#ccc'}, grid:{color:'rgba(255,255,255,0.1)'} } }, plugins:{ legend:{ display:false } } }
+        });
+
+        // 4) Products Top 10 차트
+        const vpCtx = document.getElementById('vendorProductChart').getContext('2d');
+        const vpData = stats.vendor_product_top10||[];
+        vendorProductChartInstance = new Chart(vpCtx, {
+            type:'bar',
+            data:{ labels:vpData.map(d=>d.product_name), datasets:[{ label:'CVE Count', data:vpData.map(d=>d.count), backgroundColor:'rgba(78,156,255,0.7)', borderColor:'#2a6bbf', borderWidth:1, barThickness:60, maxBarThickness:60 }] },
+            options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, ticks:{color:'#ccc'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#ccc'}, grid:{color:'rgba(255,255,255,0.1)'} } }, plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: ctx=>`${ctx.label}: ${ctx.formattedValue} CVEs` } } } }
+        });
+    } catch(error) {
+        console.error('Failed to fetch vendor stats:',error);
+    }
+}
 
     function showProductDashboard(productName) {
         const dashboard = document.getElementById('dashboard-section');
         const title = document.getElementById('dashboard-title');
 
-        mainTitle.textContent = productName;
         title.textContent = `'${productName}' 관련 통계`;
         dashboard.style.display = 'grid';
         fetchAndRenderCharts(productName);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    function showVendorDashboard(vendorName) {
+    const dashboard = document.getElementById('dashboard-section');
+    const title = document.getElementById('dashboard-title');
+    title.textContent = `'${vendorName}' 관련 통계`;
+    dashboard.style.display = 'grid';
+    fetchAndRenderVendor(vendorName);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
   </script>
 {% endblock %}

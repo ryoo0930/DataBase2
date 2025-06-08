@@ -53,6 +53,9 @@ body {
   gap: 2rem;
   align-items: stretch;
 }
+.dashboard .trend-full {
+  grid-column: 1 / -1;
+}
 
 .chart-container {
   background: #111;
