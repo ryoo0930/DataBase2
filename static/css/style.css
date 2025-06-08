@@ -271,11 +271,27 @@ body {
   text-decoration: underline;
   text-decoration-color: #555;
   text-decoration-style: dotted;
+  text-decoration-line: none;
   cursor: pointer;
 }
 #cveTable .product-link:hover {
   text-decoration-color: #fff;
   color: #eee;
+  text-decoration-line: none;
+}
+
+#cveTable .vendor-link {
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: #555;
+  text-decoration-style: dotted;
+  text-decoration-line: none;
+  cursor: pointer;
+}
+#cveTable .vendor-link:hover {
+  text-decoration-color: #fff;
+  color: #eee;
+  text-decoration-line: none;
 }
 
 /* CVE-ID 링크 색상을 Severity 별로 다르게 */

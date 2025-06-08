@@ -11,7 +11,15 @@
     </a>
   </td>
   <td>{{ c.description }}</td>
-  <td>{{ c.vendor_name or 'Unknown' }}</td>
+  <td>
+    {% if c.vendor_name and c.vendor_name != 'Unknown' %}
+      <a class="vendor-link" onclick="showVendorDashboard('{{ c.vendor_name|e }}')" title="{{ c.vendor_name|e }}">
+        {{ c.vendor_name }}
+      </a>
+    {% else %}
+      {{ 'Unknown' }}
+    {% endif %}
+  </td>
   <td>
     {% if c.product_name and c.product_name != 'Unknown' %}
       <a class="product-link" onclick="showProductDashboard('{{ c.product_name|e }}')" title="{{ c.product_name|e }}">
