@@ -16,8 +16,8 @@ logging.basicConfig(level=logging.INFO)
 
 def get_db_connection():
     return pymysql.connect(
-        host='0.tcp.jp.ngrok.io', # ngrok 사용
-        port=11079,
+        host='', # ngrok 사용
+        port=, # ngrok 사용
         user='root',
         password='',
         db='cve_db',
